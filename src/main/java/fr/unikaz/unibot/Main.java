@@ -1,5 +1,6 @@
 package fr.unikaz.unibot;
 
+import fr.unikaz.unibot.listeners.Party;
 import fr.unikaz.unibot.listeners.Poll;
 
 import javax.security.auth.login.LoginException;
@@ -17,7 +18,8 @@ public class Main {
 			.setEventManager(new AnnotatedEventManager())
 			.build();
 		jda.addEventListener(
-			new Poll()
+			new Poll(),
+			new Party()
 		);
 	}
 

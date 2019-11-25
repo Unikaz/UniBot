@@ -13,13 +13,14 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageChannel;
 import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.MessageReaction;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
 import net.dv8tion.jda.api.events.message.react.MessageReactionRemoveEvent;
 import net.dv8tion.jda.api.hooks.SubscribeEvent;
 
-public class Poll {
-	public static final String KEY = "/poll ";
+public class Party {
+	public static final String KEY = "/party ";
 
 	public static final WeakHashMap<String, Message> HISTORY = new WeakHashMap<>();
 	public static final WeakHashMap<String, Object> LOCKS = new WeakHashMap<>();
@@ -27,31 +28,34 @@ public class Poll {
 	@SubscribeEvent
 	public void onMessage(MessageReceivedEvent event) {
 		if (!event.getMessage().getContentDisplay().startsWith(KEY)) return;
-		List<String> values = new ArrayList<>(Arrays.asList(event
-			.getMessage()
-			.getContentDisplay()
-			.substring(6)
-			.split("\"")));
-		event.getMessage().delete().queue();
-		values.removeIf(s -> s.trim().isEmpty());
-		if (values.size() < 2) {
+		String value;
+		try {
+			value = event.getMessage().getContentDisplay().substring(6);
+		} catch (Exception e) {
 			MessageChannel channel = event.getChannel();
-			channel.sendMessage("Not enough arguments. Use like `/poll \"question\" \"something 1\"` minimum.").queue();
+			channel.sendMessage(Main.getConf().partyErrorArguments).queue();
 			return;
 		}
+		event.getMessage().delete().queue();
 		EmbedBuilder eb = new EmbedBuilder();
-		eb.setTitle(values.remove(0), null);
+		eb.setTitle(value, null);
 		if (Main.getConf().pollColor != null)
 			eb.setColor(Main.getConf().pollColor);
-		for (int i = 0; i < values.size(); i++) {
-			eb.addField(Emoji.DIGITS[i].val + ' ' + values.get(i), "", false);
-		}
+
+		eb.addField(Emoji.WHITE_CHECK_MARK.val + ' ' + Main.getConf().partyTextYes, "", false);
+		eb.addField(Emoji.X.val + ' ' + Main.getConf().partyTextNo, "", false);
+		eb.addField(Main.getConf().partyTextCounter, "", false);
+		eb.addField("", Main.getConf().partyText, false);
+
+
 		new Thread(() -> {
 			MessageEmbed embed = eb.build();
 			Message message = event.getChannel().sendMessage(embed).complete();
-			for (int i = 0; i < values.size(); i++) {
-				message.addReaction(Emoji.DIGITS[i].val).complete();
-			}
+			message.addReaction(Emoji.WHITE_CHECK_MARK.val).complete();
+			message.addReaction(Emoji.X.val).complete();
+			message.addReaction(Emoji.ONE.val).complete();
+			message.addReaction(Emoji.TWO.val).complete();
+			message.addReaction(Emoji.THREE.val).complete();
 			// register in history
 			HISTORY.put(message.getGuild().getId() + "-" + message.getChannel().getId() + "-" + message.getId(), message);
 		}).start();
@@ -60,6 +64,8 @@ public class Poll {
 	@SubscribeEvent
 	public void onReactionAdd(MessageReactionAddEvent event) {
 		if (event.getReaction().isSelf()) return;
+		System.out.println(event.getReaction().getReactionEmote().getEmoji());
+		if(true) return;
 		String hash = event.getGuild().getId() + '-' + event.getChannel().getId() + '-' + event.getMessageId();
 		// Lock to avoid errors
 		Object lock = LOCKS.computeIfAbsent(hash, k -> new Object());
@@ -74,6 +80,11 @@ public class Poll {
 				HISTORY.put(hash, message);
 			}
 			if (!Main.getJda().getSelfUser().equals(message.getAuthor())) return; // if the bot is not the author
+			//todo Check if its V/X or digit
+			// if V... ok
+			// if digit Check if V is present or remove digit
+			// if X check if V and digits and remove them
+			// recalculate total
 			MessageEmbed embed = message.getEmbeds().get(0);
 			EmbedBuilder eb2 = new EmbedBuilder();
 			eb2.setTitle(embed.getTitle());
@@ -96,6 +107,7 @@ public class Poll {
 	@SubscribeEvent
 	public void onReactionRemove(MessageReactionRemoveEvent event) {
 		if (event.getReaction().isSelf()) return;
+		if(true) return;
 		String hash = event.getGuild().getId() + '-' + event.getChannel().getId() + '-' + event.getMessageId();
 		// Lock to avoid errors
 		Object lock = LOCKS.computeIfAbsent(hash, k -> new Object());
@@ -110,6 +122,10 @@ public class Poll {
 				HISTORY.put(hash, message);
 			}
 			if (!Main.getJda().getSelfUser().equals(message.getAuthor())) return; // if the bot is not the author
+			//todo Check if its V/X or digit
+			// if V Check if he comes with someone and remove the digit
+			// recalculate total
+
 			MessageEmbed embed = message.getEmbeds().get(0);
 			EmbedBuilder eb2 = new EmbedBuilder();
 			eb2.setTitle(embed.getTitle());
@@ -131,5 +147,20 @@ public class Poll {
 			Message m = event.getChannel().editMessageById(message.getId(), embed).complete();
 			HISTORY.put(hash, m);
 		}
+	}
+
+	private int calculateTotal(Message message){
+		int total = -7; // to remove bot reactions
+		for (MessageReaction reaction : message.getReactions()) {
+			if(!reaction.getReactionEmote().isEmoji()) continue;
+			String e = reaction.getReactionEmote().getEmoji();
+			if(Emoji.WHITE_CHECK_MARK.val.equals(e))
+				total++;
+			for (int i = 0; i < Emoji.DIGITS.length; i++) {
+				if(Emoji.DIGITS[i].val.equals(e))
+					total+=i;
+			}
+		}
+		return total;
 	}
 }
