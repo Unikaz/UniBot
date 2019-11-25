@@ -46,10 +46,14 @@ public abstract class AConfig {
 							f.set(this, String.valueOf(value).charAt(0));
 						return;
 					}
-					if (value == null || "".equals(value)) {
+					if ("".equals(value)) {
 						f.set(this, null);
 						return;
 					}
+					if(value == null){
+						return;
+					}
+
 					PropertyEditor editor = PropertyEditorManager.findEditor(f.getType());
 					editor.setAsText(prop.getProperty(f.getName()));
 					f.set(this, editor.getValue());
@@ -57,8 +61,10 @@ public abstract class AConfig {
 				} catch (Exception e) {
 					System.err.println(e.getMessage());
 					e.printStackTrace();
+				}finally {
+					f.setAccessible(acc);
 				}
-				f.setAccessible(acc);
+
 			});
 		} catch (IOException e) {
 			System.err.println("Cannot find config file named " + filename);
@@ -80,7 +86,8 @@ public abstract class AConfig {
 					prop.setProperty(f.getName(), "");
 				else {
 					if (f.getType() == Color.class)
-						prop.setProperty(f.getName(), ((Color)f.get(this)).toString());
+						prop.setProperty(f.getName(),
+							((Color) f.get(this)).getRed() + "," + ((Color) f.get(this)).getGreen() + "," + ((Color) f.get(this)).getBlue());
 					else
 						prop.setProperty(f.getName(), String.valueOf(f.get(this)));
 				}
