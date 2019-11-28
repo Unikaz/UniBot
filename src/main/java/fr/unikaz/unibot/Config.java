@@ -7,8 +7,10 @@ public class Config extends AConfig {
 	// Main config
 	public String token = "Place your token here !"; // here in the config file, not in the code ;)
 	// Poll command
+	public boolean poll = false;
 	public Color pollColor = Color.red; // this is not working well, use pattern "rrr,ggg,bbb" in config
 	// Party command
+	public boolean party = true;
 	public Color partyColor = Color.red; // this is not working well, use pattern "rrr,ggg,bbb" in config
 	public String partyTextYes = "Yes !";
 	public String partyTextNo = "No";
