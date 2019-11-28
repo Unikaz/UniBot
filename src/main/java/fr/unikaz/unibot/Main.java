@@ -17,10 +17,10 @@ public class Main {
 		jda = new JDABuilder(conf.token)
 			.setEventManager(new AnnotatedEventManager())
 			.build();
-		jda.addEventListener(
-			new Poll(),
-			new Party()
-		);
+		if (conf.poll)
+			jda.addEventListener(new Poll());
+		if (conf.party)
+			jda.addEventListener(new Party());
 	}
 
 	public static JDA getJda() {

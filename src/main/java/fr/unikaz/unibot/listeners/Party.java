@@ -6,23 +6,29 @@ import fr.unikaz.unibot.Main;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.stream.Collectors;
 
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.entities.IMentionable;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageChannel;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.MessageReaction;
+import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.dv8tion.jda.api.events.message.react.GenericMessageReactionEvent;
 import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
 import net.dv8tion.jda.api.events.message.react.MessageReactionRemoveEvent;
 import net.dv8tion.jda.api.hooks.SubscribeEvent;
+import net.dv8tion.jda.api.requests.restaction.pagination.ReactionPaginationAction;
 
 public class Party {
 	public static final String KEY = "/party ";
 
-	public static final WeakHashMap<String, Message> HISTORY = new WeakHashMap<>();
 	public static final WeakHashMap<String, Object> LOCKS = new WeakHashMap<>();
 
 	@SubscribeEvent
@@ -37,130 +43,112 @@ public class Party {
 			return;
 		}
 		event.getMessage().delete().queue();
-		EmbedBuilder eb = new EmbedBuilder();
-		eb.setTitle(value, null);
-		if (Main.getConf().pollColor != null)
-			eb.setColor(Main.getConf().pollColor);
-
-		eb.addField(Emoji.WHITE_CHECK_MARK.val + ' ' + Main.getConf().partyTextYes, "", false);
-		eb.addField(Emoji.X.val + ' ' + Main.getConf().partyTextNo, "", false);
-		eb.addField(Main.getConf().partyTextCounter, "", false);
-		eb.addField("", Main.getConf().partyText, false);
-
-
 		new Thread(() -> {
-			MessageEmbed embed = eb.build();
+			MessageEmbed embed = rebuildEmbed(value, " ", " ", 0);
 			Message message = event.getChannel().sendMessage(embed).complete();
 			message.addReaction(Emoji.WHITE_CHECK_MARK.val).complete();
 			message.addReaction(Emoji.X.val).complete();
 			message.addReaction(Emoji.ONE.val).complete();
 			message.addReaction(Emoji.TWO.val).complete();
 			message.addReaction(Emoji.THREE.val).complete();
-			// register in history
-			HISTORY.put(message.getGuild().getId() + "-" + message.getChannel().getId() + "-" + message.getId(), message);
 		}).start();
 	}
 
 	@SubscribeEvent
 	public void onReactionAdd(MessageReactionAddEvent event) {
-		if (event.getReaction().isSelf()) return;
-		System.out.println(event.getReaction().getReactionEmote().getEmoji());
-		if(true) return;
-		String hash = event.getGuild().getId() + '-' + event.getChannel().getId() + '-' + event.getMessageId();
-		// Lock to avoid errors
-		Object lock = LOCKS.computeIfAbsent(hash, k -> new Object());
-		synchronized (lock) {
-			// We try to get the message from the local history to avoid calling the API everytime
-			Message message = HISTORY.get(hash);
-			if (message == null)
-				event.getChannel().getHistory().getMessageById(event.getMessageId());
-			if (message == null) { // In the worst case, we call the API ^^'
-				message = event.getChannel().retrieveMessageById(event.getMessageId()).complete();
-				// store in the history
-				HISTORY.put(hash, message);
-			}
-			if (!Main.getJda().getSelfUser().equals(message.getAuthor())) return; // if the bot is not the author
-			//todo Check if its V/X or digit
-			// if V... ok
-			// if digit Check if V is present or remove digit
-			// if X check if V and digits and remove them
-			// recalculate total
-			MessageEmbed embed = message.getEmbeds().get(0);
-			EmbedBuilder eb2 = new EmbedBuilder();
-			eb2.setTitle(embed.getTitle());
-			eb2.setDescription(embed.getDescription());
-			eb2.setColor(embed.getColor());
-			int vote = Emoji.getDigitValue(event.getReaction().getReactionEmote().getEmoji());
-			for (int i = 0; i < embed.getFields().size(); i++) {
-				MessageEmbed.Field field = embed.getFields().get(i);
-				String value = field.getValue();
-				if (i == vote)
-					value += " " + event.getUser().getAsMention();
-				eb2.addField(field.getName(), value, false);
-			}
-			embed = eb2.build();
-			Message m = event.getChannel().editMessageById(message.getId(), embed).complete();
-			HISTORY.put(hash, m);
-		}
+		handleReactionEvent(event);
 	}
 
 	@SubscribeEvent
 	public void onReactionRemove(MessageReactionRemoveEvent event) {
+		handleReactionEvent(event);
+	}
+
+	private void handleReactionEvent(GenericMessageReactionEvent event) {
 		if (event.getReaction().isSelf()) return;
-		if(true) return;
 		String hash = event.getGuild().getId() + '-' + event.getChannel().getId() + '-' + event.getMessageId();
 		// Lock to avoid errors
 		Object lock = LOCKS.computeIfAbsent(hash, k -> new Object());
 		synchronized (lock) {
 			// We try to get the message from the local history to avoid calling the API everytime
-			Message message = HISTORY.get(hash);
-			if (message == null)
-				event.getChannel().getHistory().getMessageById(event.getMessageId());
+			Message message = event.getChannel().getHistory().getMessageById(event.getMessageId());
 			if (message == null) { // In the worst case, we call the API ^^'
 				message = event.getChannel().retrieveMessageById(event.getMessageId()).complete();
-				// store in the history
-				HISTORY.put(hash, message);
 			}
 			if (!Main.getJda().getSelfUser().equals(message.getAuthor())) return; // if the bot is not the author
-			//todo Check if its V/X or digit
-			// if V Check if he comes with someone and remove the digit
-			// recalculate total
-
-			MessageEmbed embed = message.getEmbeds().get(0);
-			EmbedBuilder eb2 = new EmbedBuilder();
-			eb2.setTitle(embed.getTitle());
-			eb2.setDescription(embed.getDescription());
-			eb2.setColor(embed.getColor());
-			int vote = Emoji.getDigitValue(event.getReaction().getReactionEmote().getEmoji());
-			for (int i = 0; i < embed.getFields().size(); i++) {
-				MessageEmbed.Field field = embed.getFields().get(i);
-				String value = field.getValue();
-				if (i == vote) {
-					List<String> mentions = new ArrayList<>(Arrays.asList(value.split(" ")));
-					mentions.removeIf(v -> v.trim().isEmpty());
-					mentions.removeIf(v -> event.getUser().getAsMention().equals(v));
-					value = mentions.isEmpty() ? "" : String.join(" ", mentions);
-				}
-				eb2.addField(field.getName(), value, false);
+			MessageReaction reaction = event.getReaction();
+			if (!reaction.getReactionEmote().isEmoji()) return;
+			String e = reaction.getReactionEmote().getEmoji();
+			if (!Emoji.WHITE_CHECK_MARK.val.equals(e) &&
+				!Emoji.X.val.equals(e) &&
+				Arrays.stream(Emoji.DIGITS).noneMatch(emoji -> emoji.val.equals(e))) {
+				// random emoji... don't care
+				return;
 			}
-			embed = eb2.build();
-			Message m = event.getChannel().editMessageById(message.getId(), embed).complete();
-			HISTORY.put(hash, m);
+			Message finalMessage = message;
+			new Thread(() -> update(finalMessage)).start();
 		}
 	}
 
-	private int calculateTotal(Message message){
-		int total = -7; // to remove bot reactions
+	private void update(Message message) {
+		int total = 0; // to remove bot reactions
+		Map<String, Integer> yesMentions = new HashMap<>();
+		List<String> noMentions = new ArrayList<>();
+		int anonymous = 0;
 		for (MessageReaction reaction : message.getReactions()) {
-			if(!reaction.getReactionEmote().isEmoji()) continue;
+			if (!reaction.getReactionEmote().isEmoji()) continue;
+			if (reaction.getCount() == 1) continue; // dodge useless call
 			String e = reaction.getReactionEmote().getEmoji();
-			if(Emoji.WHITE_CHECK_MARK.val.equals(e))
-				total++;
-			for (int i = 0; i < Emoji.DIGITS.length; i++) {
-				if(Emoji.DIGITS[i].val.equals(e))
-					total+=i;
+			if (Emoji.WHITE_CHECK_MARK.val.equals(e)) {
+				total += reaction.getCount() - 1;
+				yesMentions = reaction.retrieveUsers().stream()
+					.filter(u -> !u.isBot())
+					.collect(Collectors.toMap(IMentionable::getAsMention, u -> 0));
+			} else if (Emoji.X.val.equals(e)) {
+				noMentions = reaction.retrieveUsers().stream()
+					.filter(u -> !u.isBot())
+					.map(IMentionable::getAsMention).collect(Collectors.toList());
+			} else {
+				for (int i = 0; i < Emoji.DIGITS.length; i++) {
+					if (Emoji.DIGITS[i].val.equals(e)) {
+						total += i * (reaction.getCount() - 1);
+						ReactionPaginationAction users = reaction.retrieveUsers();
+						for (User user : users) {
+							if (user.isBot()) continue;
+							if (yesMentions.containsKey(user.getAsMention())) {
+								yesMentions.put(user.getAsMention(), yesMentions.get(user.getAsMention()) + i);
+							} else {
+								anonymous += i;
+							}
+						}
+					}
+				}
 			}
 		}
-		return total;
+		String yes = "";
+		if (!yesMentions.isEmpty())
+			yes = yesMentions.entrySet().stream()
+				.map(e -> e.getKey() + (e.getValue() > 0 ? "(+" + e.getValue() + ")" : ""))
+				.collect(Collectors.joining(", "));
+		if (anonymous > 0)
+			yes += " +" + anonymous;
+		MessageEmbed embed = rebuildEmbed(message.getEmbeds().get(0).getTitle(),
+			yes,
+			!noMentions.isEmpty() ? String.join(", ", noMentions) : " ",
+			total);
+		message.getChannel().editMessageById(message.getId(), embed).complete();
+	}
+
+	private MessageEmbed rebuildEmbed(String title, String yesStr, String noStr, int total) {
+		EmbedBuilder eb = new EmbedBuilder();
+		eb.setTitle(title, null);
+		eb.setColor(Main.getConf().partyColor);
+		if (Main.getConf().pollColor != null)
+			eb.setColor(Main.getConf().pollColor);
+		eb.addField(Emoji.WHITE_CHECK_MARK.val + ' ' + Main.getConf().partyTextYes, yesStr, false);
+		eb.addField(Emoji.X.val + ' ' + Main.getConf().partyTextNo, noStr, false);
+		eb.addField(Main.getConf().partyTextCounter, total + "", false);
+		eb.addField("", Main.getConf().partyText, false);
+		return eb.build();
 	}
 }
